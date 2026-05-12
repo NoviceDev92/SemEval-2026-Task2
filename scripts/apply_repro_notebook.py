@@ -137,22 +137,29 @@ def main() -> None:
     nb.get("metadata", {}).pop("kaggle", None)
 
     cells = nb["cells"]
-    cells.insert(
-        0,
-        {
-            "cell_type": "code",
-            "metadata": {},
-            "outputs": [],
-            "execution_count": None,
-            "source": cell_source(CELL0_REPRO),
-        },
-    )
+    first_src = "".join(cells[0].get("source", []))
+    already = "SEMEVAL_REPO_ROOT" in first_src and "artifact_path" in first_src
+    if not already:
+        cells.insert(
+            0,
+            {
+                "cell_type": "code",
+                "metadata": {},
+                "outputs": [],
+                "execution_count": None,
+                "source": cell_source(CELL0_REPRO),
+            },
+        )
+
+    cells[0]["source"] = cell_source(CELL0_REPRO)
     cells[1]["source"] = cell_source(CELL_LOAD_DATA)
 
     def src(i: int) -> str:
         return "".join(cells[i].get("source", []))
 
-    # 2: sanitation
+    # [0]=repro [1]=load [2]=sanitation [3]=stats [4]=gpu [5]=arousal [6]=valence [7]=tsne [8]=submit [9]=forensic [10]=ensemble
+
+    # sanitation
     s = src(2)
     s = s.replace(
         'TRAIN_PATH = "/kaggle/input/samuval/TRAIN_RELEASE_3SEP2025/train_subtask1.csv"',
@@ -160,7 +167,7 @@ def main() -> None:
     )
     cells[2]["source"] = cell_source(s)
 
-    # 3: EDA stats
+    # EDA stats
     s = src(3)
     s = s.replace(
         'train = pd.read_csv("/kaggle/input/samuval/TRAIN_RELEASE_3SEP2025/train_subtask1.csv")',
@@ -172,12 +179,12 @@ def main() -> None:
     )
     cells[3]["source"] = cell_source(s)
 
-    # 6: valence ValConfig
+    # valence ValConfig
     s = src(6)
     s = s.replace('DEVICE = "cuda"', "DEVICE = TORCH_DEVICE")
     cells[6]["source"] = cell_source(s)
 
-    # 8: submission
+    # submission
     s = src(8)
     s = s.replace(
         "# --- CONFIG ---\n"
@@ -210,7 +217,7 @@ def main() -> None:
     )
     cells[8]["source"] = cell_source(s)
 
-    # 9: forensic
+    # forensic
     s = src(9)
     s = s.replace(
         '    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"\n',
@@ -218,7 +225,7 @@ def main() -> None:
     )
     cells[9]["source"] = cell_source(s)
 
-    # 10: ensemble
+    # ensemble
     s = src(10)
     s = s.replace('DEVICE = "cuda"', "DEVICE = TORCH_DEVICE")
     cells[10]["source"] = cell_source(s)
