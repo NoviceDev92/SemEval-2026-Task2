@@ -1,0 +1,10 @@
+# Molecular property pipeline (install RDKit via conda on Windows: conda install -c conda-forge rdkit)
+torch>=2.0
+transformers>=4.36
+datasets>=2.14
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+tqdm>=4.65
+# Optional: pip install torch-geometric (see PyG docs for CUDA wheel)
+# rdkit-pypi works on some platforms: pip install rdkit-pypi

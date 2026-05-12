@@ -1,0 +1,367 @@
+% This must be in the first 5 lines to tell arXiv to use pdfLaTeX, which is strongly recommended.
+\pdfoutput=1
+
+\documentclass[11pt, a4paper]{article}
+
+% --- OFFICIAL ACL STYLE ---
+% Note: Do NOT use the [review] option here, as that turns on line numbers.
+\usepackage{acl}
+
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+
+% For proper casing and accents
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+
+% --- USER CUSTOM PACKAGES ---
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{float}
+\usepackage{xcolor}
+
+% =========================================================
+% TITLE & AUTHORS (Official ACL Format)
+% =========================================================
+\title{LexMachina at SemEval-2026 Task 2: Adversarial Disentanglement of User Identity for Longitudinal Valence-Arousal Prediction}
+
+\author{
+  Somdev Ganguli, Vibhan Dutta, Romit Datta, Amit Barman and Sudip Kumar Naskar \\
+  Department of Computer Science and Engineering \\
+  Jadavpur University, Kolkata, India \\
+  \texttt{\{somdevg, vibhand, romitd\}.cse.ug@jadavpuruniversity.in} \\
+  \texttt{\{amitbarman811, sudip.naskar\}@gmail.com}
+}
+
+% =========================================================
+% DOCUMENT BEGINS
+% =========================================================
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Tracking emotional dynamics like valence and arousal is critical for understanding users' affective baselines in ecological text. However, encoder models often struggle to distinguish stable user traits from dynamic shifts, leading to poor generalization. This paper presents LexMachina, our system for SemEval-2026 Task 2, addressing ``domain shift'' and ``regression to the mean.'' LexMachina utilizes a DeBERTa-v3-Base backbone with a bifurcated strategy: post-hoc Isotonic Regression for valence calibration and a Domain Adversarial Neural Network (DANN) to mitigate user-bias in arousal. LexMachina achieved composite scores of $r=0.645$ (Valence) and $r=0.434$ (Arousal), demonstrating that adversarial disentanglement effectively captures nuances in longitudinal affective data.
+\end{abstract}
+
+\section{Introduction}
+Affective quantification traditionally relies on the Valence-Arousal space \citep{russell1980circumplex}. In this work, we address SemEval-2026 Task 2 (Subtask 1) \citep{soni-etal-2026-semeval} by predicting continuous valence-arousal trajectories from longitudinal essays. A primary challenge in this domain is annotator idiosyncrasy and label noise. We propose a multi-stage pipeline built on DeBERTa-v3-base \citep{DBLP:journals/corr/abs-2006-03654} embeddings. To ensure signal integrity, we implemented an Out-of-Fold (OOF) Data Sanitation Protocol, purging 9\% of the training data exhibiting extreme deviation ($\delta > 1.5$) from model consensus. Our modeling approach is bifurcated: Valence is refined via post-hoc Isotonic Regression to fix calibration drift, while Arousal is modeled through a Domain Adversarial Neural Network (DANN) to disentangle user-specific biases from universal emotional signals.
+
+\section{Background and Related Work}
+
+\subsection{Related Work}
+Transformer-based architectures have set benchmarks in mapping text to continuous Valence-Arousal space \citep{mendes2023quantifying}. Recent innovations include integrating Valence-Arousal-Dominance (VAD) features into attention mechanisms \citep{moreno2025utbnlp} and utilizing ordinal classification to minimize perceptual errors \citep{mitsios2024improved}. For low-resource or domain-specific settings, strategies like Retrieval-Augmented Generation (RAG) \citep{lewis2020retrieval} and multi-teacher pseudo-labeling have proven effective for cross-domain adaptation \citep{jian-etal-2025-cyut}. Our work builds on these prior studies by applying adversarial disentanglement to longitudinal user data.
+
+\subsection{Task Definition and Evaluation}
+The task requires mapping a user's chronological stream $S = \{e_1, e_2, \dots, e_m\}$ to bivariate outputs $(v_i, a_i)$ where $v \in [-2, 2]$ and $a \in [0, 2]$. Evaluation relies on a Composite Correlation \citep{soni-etal-2026-semeval} ($r_{comp}$), aggregating inter-user traits ($r_{between}$) and temporal fluctuations ($r_{within}$) via the Fisher-Z transformation \citep{10.1093/biomet/10.4.507}: 
+\begin{equation}
+\begin{aligned}
+    r_{comp} = \tanh\Biggl( \frac{1}{2} \Bigl( &\operatorname{arctanh}(r_{between}) \\ 
+    &+ \operatorname{arctanh}(r_{within}) \Bigr) \Biggr)
+\end{aligned}
+\end{equation}
+
+\subsection{Dataset Description}
+The dataset consists of longitudinal essays and feeling words. Our partition strategy highlights the stylistic gap addressed by our adversarial approach (cf. Table \ref{tab:data_stats}).
+
+\begin{table}[h]
+\centering
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{l|c|cc|cc}
+\toprule
+\textbf{Partition} & \textbf{User Type} & \textbf{\# Users} & \textbf{\# Texts} & \textbf{Val ($\mu \pm \sigma$)} & \textbf{Aro ($\mu \pm \sigma$)} \\ 
+\midrule
+\textbf{Train} & Seen & 137 & 2,487 & $0.22 \pm 1.29$ & $0.75 \pm 0.76$ \\
+\textbf{Dev} & Seen & 92 & 277 & $0.22 \pm 1.30$ & $0.75 \pm 0.74$ \\
+\textbf{Test} & \textbf{Unseen} & 91 & 1,737 & \textit{Hidden} & \textit{Hidden} \\ 
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Dataset Statistics.}
+\label{tab:data_stats}
+\end{table}
+
+\section{System Overview}
+\label{sec:system_overview}
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{arch_diag.jpeg}
+    \caption{System Architecture. The pipeline splits into two parallel streams after the DeBERTa-v3 backbone. The Valence stream (top) utilizes a standard regression head followed by Isotonic Calibration to map predictions to the target distribution. The Arousal stream (bottom) employs a Domain-Adversarial Neural Network (DANN) with a Gradient Reversal Layer (GRL) to enforce user-invariant feature learning, mitigating the generalization gap for unseen subjects.} 
+    \label{fig:architecture}
+\end{figure*}
+
+\begin{algorithm*}[t]
+\caption{Adversarial Training Loop for Arousal Stream}
+\label{alg:dann_training}
+\begin{algorithmic}[1]
+\Require Sanitized Corpus $\mathcal{S}_{clean}$, Max Epochs $E$, Total Steps $T$
+\Require Feature Extractor $G_f$, Regressor $G_y$, Discriminator $G_d$
+\State Initialize network parameters $\theta_f, \theta_y, \theta_d$
+\State $t \gets 0$ \Comment{Current step counter}
+\For{$epoch = 1$ \textbf{to} $E$}
+    \For{each batch $(X, Y, U)$ \textbf{in} $\mathcal{S}_{clean}$}
+        \State $p \gets \frac{t}{T}$ \Comment{Training progress $p \in [0, 1]$}
+        \State $\lambda \gets \frac{2}{1 + \exp(-10 \cdot p)} - 1$ \Comment{Dynamic GRL schedule}
+        
+        \State \textbf{Forward Pass:}
+        \State $H \gets G_f(X; \theta_f)$ \Comment{Extract latent features}
+        \State $\hat{Y} \gets G_y(H; \theta_y)$ \Comment{Predict Arousal}
+        \State $\hat{U} \gets G_d(H; \theta_d)$ \Comment{Predict User ID}
+        
+        \State \textbf{Compute Losses:}
+        \State $\mathcal{L}_{task} \gets \alpha\text{MSE}(Y, \hat{Y}) + (1-\alpha)\text{CCC}(Y, \hat{Y})$
+        \State $\mathcal{L}_{domain} \gets \text{CrossEntropy}(U, \hat{U})$
+        
+        \State \textbf{Backward Pass (with Gradient Reversal):}
+        \State $\nabla_{\theta_y} \gets \frac{\partial \mathcal{L}_{task}}{\partial \theta_y}$
+        \State $\nabla_{\theta_d} \gets \frac{\partial \mathcal{L}_{domain}}{\partial \theta_d}$
+        \State $\nabla_{\theta_f} \gets \frac{\partial \mathcal{L}_{task}}{\partial \theta_f} - \lambda \frac{\partial \mathcal{L}_{domain}}{\partial \theta_f}$ \Comment{Invert domain gradient}
+        
+        \State \textbf{Update Parameters:}
+        \State $\theta_y \gets \theta_y - \eta \nabla_{\theta_y}$
+        \State $\theta_d \gets \theta_d - \eta \nabla_{\theta_d}$
+        \State $\theta_f \gets \theta_f - \eta \nabla_{\theta_f}$
+        
+        \State $t \gets t + 1$
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm*}
+
+We propose a dual-stream architecture designed to address the distinct generalization challenges of the `Seen' versus `Unseen' user cohorts. While both streams utilize a shared linguistic backbone, they employ divergent optimization strategies: a direct regression approach with post-hoc calibration for Valence, and a Domain-Adversarial framework for Arousal. 
+
+\subsection{Data Sanitation Protocol}
+Preliminary error analysis revealed a subset of samples with noisy labels where ground truth annotation sharply contradicted the semantic polarity of the text. To address this, we implemented an automated sanitation strategy grounded in the principle of pruning training sets to remove instances that impede representation learning \citep{angelova2005pruning}. 
+
+We utilized a 3-Fold OOF Cross-Validation strategy to identify these outliers. Samples with an absolute error exceeding $\delta > 1.5$ were identified as poisonous and discarded, removing approximately 9\% of the training data. After the official test labels were released prior to paper submission, we also ran post-hoc forensic analysis on the test set. Table \ref{tab:poison_samples} illustrates examples of extreme test-label noise observed in that post-release analysis.
+
+\begin{table}[H]
+\centering
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{p{5.5cm}|cc|c}
+\toprule
+\textbf{Test Set Essay Excerpt} & \textbf{True Val.} & \textbf{Pred Val.} & \textbf{$\delta$} \\ 
+\midrule
+\textit{``I have had one shitty night... I hate life sometimes... I'm very sad and angry.''} & 2.00 & -1.39 & 3.39 \\
+\midrule
+\textit{``Tired , Annoyed , Furious , Boredom , Upset''} & 2.00 & -1.39 & 3.39 \\
+\midrule
+\textit{``Tired , Depress , Sad , Conflicted , Trapped''} & 2.00 & -1.39 & 3.39 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Gold Standard Annotation Errors in the Released Official Test Labels. Post-release forensic error analysis ($\delta > 3.0$) reveals instances where our model correctly predicted extreme negative Valence, but was heavily penalized by apparently inverted ground-truth labels.}
+\label{tab:poison_samples}
+\end{table}
+
+To check whether the purged samples came from specific users, we compared observed per-user purge counts with expected counts under a uniform error-rate assumption. The results are summarized in Table \ref{tab:purge_distribution}. The chi-squared test was not statistically significant, and correlation tests also showed no meaningful link between purge rate and user-level affective profile. This suggests that the removed samples reflect random annotation noise, not consistent bias from particular users.
+
+The pruning threshold $\delta=1.5$ was set before model training, based on label-scale structure (Valence $\in \{-2,-1,0,1,2\}$; Arousal $\in \{0,1,2\}$). Since adjacent labels are one unit apart, $\delta=1.5$ separates ordinary one-step disagreement from larger polarity inversions. We did not tune $\delta$ on downstream performance to avoid information leakage between sanitation and training.
+
+\begin{table}[h]
+\centering
+\Large
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Test} & \textbf{Statistic} & \textbf{Interpretation} \\
+\midrule
+Chi-squared goodness-of-fit & $p=0.076$ & No significant user-level concentration \\
+Purge rate vs.\ mean valence & $r=0.062,\ p=0.47$ & No significant correlation \\
+Purge rate vs.\ mean arousal & $r=-0.163,\ p=0.06$ & No significant correlation \\
+Purge rate vs.\ valence std. dev. & $r=-0.136,\ p=0.11$ & No significant correlation \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Evidence that purged samples are not user-specific.}
+\label{tab:purge_distribution}
+\end{table}
+
+\subsection{Linguistic Backbone}
+For feature extraction, we utilize DeBERTa-v3-base, grounded in the foundational bidirectional Transformer attention mechanism \citep{vaswani2017attention}. DeBERTa-v3 was selected specifically for its disentangled attention mechanism and superior pre-training via ELECTRA-style discriminative objectives \citep{clark2020electra}, which provide a highly efficient weight initialization for downstream affective tasks. 
+
+We extract the contextualized word embeddings from the final hidden layer and aggregate them using Max-Pooling (alongside the \texttt{[CLS]} token) to capture the most salient features of the input sequence $x_i$, where $h_i \in \mathbb{R}^{768}$ serves as the latent affective representation.
+\begin{equation}
+    h_i = \text{MaxPool}(\text{DeBERTa}(x_i))
+\end{equation}
+
+\subsection{Valence Stream: Regression \& Calibration}
+The Valence stream projects the latent vector $h_i$ through a standard regression head followed by a linear layer. Modern deep networks are frequently miscalibrated, exhibiting a conservative bias where predictions cluster around the mean \citep{guo2017calibration}. 
+
+To address this, we applied \textbf{Post-Hoc Isotonic Calibration} \citep{zadrozny2002transforming}. We also evaluated parametric alternatives like Platt Scaling \citep{platt1999probabilistic} to fix the calibration drift, but opted for the non-parametric route to better map the cumulative distribution function (CDF) of the validation set:
+\begin{equation}
+    \hat{v}_{final} = f_{iso}(\hat{v}_{raw})
+\end{equation}
+
+\subsection{Arousal Stream: Domain-Adversarial Neural Network (DANN)}
+For Arousal, we identified a critical User Generalization Gap. In the official test split, \textbf{60.2\% of the total text volume} (1,045 out of 1,737 texts) was written by users not present in the training set. This heavy skew toward previously unseen users meant that standard supervision models, which often overfit to the writing styles of ``Seen'' users, would fail to generalize.
+
+To mitigate this, we implemented a {\textbf{DANN}} \citep{ajakan2014domain, ganin2016domain}. The architecture consists of three components: (1) The shared Feature Extractor ($G_f$), (2) A Label Predictor ($G_y$) using Hybrid Loss, and (3) A User Discriminator ($G_d$) attempting to guess the User ID from $h_i$. By introducing a Gradient Reversal Layer (GRL), we create a `min-max game' in the latent space \citep{tzeng2017adversarial}, forcing the model to strip stylistic identity markers and learn user-invariant representations of emotional intensity. The complete step-by-step optimization procedure for this adversarial min-max game is formalized in Algorithm \ref{alg:dann_training}.
+
+\section{Experimental Setup}
+\label{sec:experimental_setup}
+
+\subsection{Implementation Details}
+The source code for LexMachina is available on GitHub.\footnote{\url{https://github.com/NoviceDev92/SemEval-2026-Task2}} All models were implemented using PyTorch and the HuggingFace library, with training conducted on a single NVIDIA Tesla T4 GPU. Inputs were tokenized via \texttt{microsoft/deberta-v3-base} and truncated to a maximum length of 128 tokens to accommodate the average essay length (cf. Table \ref{tab:data_stats}). 
+
+We utilized the AdamW optimizer with a learning rate of $2 \times 10^{-5}$ and weight decay of $0.01$. To maintain backbone stability, we applied a linear learning rate scheduler with a 10\% warmup phase. The Arousal DANN was trained for 4 epochs---an early-stopping threshold empirically determined to allow the adversarial User Discriminator sufficient time to converge, while strictly preventing the shared feature extractor from overfitting to the `seen' user domain. The independent Valence regressor achieved optimal convergence in 3 epochs. Both streams utilized a consistent batch size of 16. For the DANN, the hybrid task loss was balanced with $\alpha = 0.5$, and the adversarial weight $\lambda$ was dynamically scaled from 0 to 1 as detailed in Algorithm \ref{alg:dann_training}.
+
+We used a constrained tuning strategy to keep the system reproducible. Most hyperparameters were fixed from standard practice or hardware limits, and only two of the hyperparameters were tuned on a validation split. Table \ref{tab:hp_summary} details our system hyperparameters. The final setup remained stable across runs, and the full 3-seed pipeline took about 35--75 minutes on one Tesla T4 GPU.
+
+\begin{table}[h]
+\centering
+\Large
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{l|l|l}
+\toprule
+\textbf{Component} & \textbf{Values / Setting} & \textbf{Selection Basis} \\
+\midrule
+Learning rate & $\{1e^{-5}, 2e^{-5}, 5e^{-5}\}\rightarrow 2e^{-5}$ & Tuned on validation split \\
+Hybrid-loss balance ($\alpha$) & $\{0.3, 0.5, 0.7\}\rightarrow 0.5$ & Tuned on validation split \\
+Optimizer & AdamW, weight decay $0.01$ & Standard transformer default \\
+GRL schedule & $\lambda=\frac{2}{1+\exp(-10p)}-1$ & Canonical DANN schedule \\
+Batch size & $16$ & Hardware limit (Tesla T4) \\
+Max length & $128$ tokens & Dataset length profile + efficiency \\
+Arousal / Valence epochs & $4 / 3$ & Validation convergence trend \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Hyperparameter selection summary.}
+\label{tab:hp_summary}
+\end{table}
+
+\subsection{Ensemble Strategy}
+To reduce output variance and improve generalization stability \citep{10.1007/3-540-45014-9_1}, our final submission utilized a 3-seed ensemble (Seeds 42, 43, 44). Models were trained from scratch for each seed, and the final predictions represent the arithmetic mean of these independent runs.
+
+\section{Results and Analysis}
+\label{sec:results}
+
+\subsection{Official Results and Cohort Analysis}
+
+Table \ref{tab:final_results} presents the performance of the LexMachina architecture across the official evaluation criteria. Our system achieved an overall composite correlation ($r_{c}$) of \textbf{0.645} for Valence and \textbf{0.434} for Arousal. 
+
+\begin{table}[h]
+\centering
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{l|ccc|ccc}
+\toprule
+\multirow{2}{*}{\textbf{Evaluation Slice}} & \multicolumn{3}{c|}{\textbf{Valence}} & \multicolumn{3}{c}{\textbf{Arousal}} \\ \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+ & \textbf{$r_{c}$} & \textbf{$r_{b}$} & \textbf{$r_{w}$} & \textbf{$r_{c}$} & \textbf{$r_{b}$} & \textbf{$r_{w}$} \\ 
+\midrule
+\textbf{Overall System} & \textbf{0.645} & \textbf{0.712} & \textbf{0.567} & \textbf{0.434} & \textbf{0.461} & \textbf{0.406} \\ 
+\midrule
+\multicolumn{7}{l}{\textit{User Generalization Breakdown}} \\
+\midrule
+Seen Users & 0.636 & 0.718 & 0.537 & 0.343 & 0.323 & 0.363 \\
+Unseen Users & 0.669 & 0.734 & 0.593 & \textbf{0.574} & \textbf{0.681} & \textbf{0.443} \\
+\midrule
+\multicolumn{7}{l}{\textit{Modality Breakdown}} \\
+\midrule
+Words Only & 0.655 & 0.730 & 0.563 & 0.572 & 0.631 & 0.507 \\
+Essay Only & 0.627 & 0.665 & 0.586 & 0.307 & 0.315 & 0.298 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Official Subtask 1 Results. Performance broken down by user cohort and input modality. Metrics are Pearson correlations: Composite ($r_{c}$), Between-User ($r_{b}$), and Within-User ($r_{w}$).}
+\label{tab:final_results}
+\end{table}
+
+For \textbf{Valence}, performance remained remarkably stable across both cohorts ($r_{c} = 0.636$ for Seen, $0.669$ for Unseen). This consistency validates our use of DeBERTa paired with post-hoc Isotonic Calibration, which successfully mapped texts to the continuous space without overfitting to specific user histories.
+
+For \textbf{Arousal}, the cohort breakdown reveals a striking validation of our Domain-Adversarial Neural Network (DANN). Designed to explicitly optimize for zero-shot generalization by stripping user identity markers, the DANN yielded an exceptional Unseen Arousal score of $r_{c} = 0.574$. However, this adversarial disentanglement introduced a stark generalization trade-off. By penalizing the encoding of user-specific traits, the model ignored the predictive historical baselines of known individuals, causing the Seen Arousal score to drop to $r_{c} = 0.343$. 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\columnwidth]{tsne_plot.png}
+    \caption{t-SNE Visualization. A two-dimensional projection of the Arousal stream's latent space ($h_i$). The high degree of overlap among different user clusters visually confirms that the DANN successfully forced the network to learn user-agnostic affective representations.}
+    \label{fig:tsne}
+\end{figure}
+
+To visually confirm this adversarial effect, we present a t-SNE projection of the Arousal stream's latent representations (cf. Figure \ref{fig:tsne}). The plot illustrates a highly overlapping, user-agnostic feature space, confirming that the Gradient Reversal Layer successfully stripped stylistic identity markers from the embeddings.
+
+\subsection{Modality and Ablation Analysis}
+Modality analysis showed a clear pattern; Valence remained stable across both input types, while Arousal was much stronger in feeling words than in essays.
+
+Ablation results are shown in Table \ref{tab:ablation_results}. For Valence, removing OOF sanitation caused the largest drop, showing that label-noise filtering is essential. Removing isotonic calibration also reduced performance, confirming that post-hoc calibration helps align predictions on unseen data. For Arousal, disabling DANN ($\lambda=0$) caused a major generalization failure: both unseen-user correlation and overall composite score dropped sharply.
+
+\begin{table}[h]
+\centering
+\normalsize
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{adjustbox}{max width=\columnwidth}
+\begin{tabular}{l|c|c}
+\toprule
+\textbf{Setting} & \textbf{Valence} & \textbf{Arousal} \\
+\midrule
+Full system (official) & 0.645 & 0.434 \\
+Words only (modality) & 0.655 & 0.572 \\
+Essay only (modality) & 0.627 & 0.307 \\
+\midrule
+Without OOF sanitation & 0.456 & -- \\
+Without isotonic calibration & 0.576 & -- \\
+Without DANN ($\lambda=0$) & -- & 0.260 \\
+Without DANN: unseen $r_b$ & -- & 0.070 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Modality and ablation results ($r_c$ unless noted).}
+\label{tab:ablation_results}
+\end{table}
+
+\section{Conclusion}
+\label{sec:conclusion}
+We presented LexMachina, a dual-stream framework for longitudinal affect assessment. Anchored by a disentangled DeBERTa-v3 backbone, our architecture effectively navigates the complexities of dynamic emotional shifts in ecological text. By implementing a rigorous OOF data sanitation protocol, we insulated our representation learning from severe label noise and semantic inversions \citep{northcutt2021pervasive}. Furthermore, our bifurcated optimization strategy yielded highly competitive correlations, particularly in the Arousal dimension. Through adversarial disentanglement \citep{ganin2016domain}, we demonstrated that stripping stylistic user biases allows for the extraction of universal, subject-agnostic linguistic markers of emotional intensity from unseen populations.
+
+\begin{figure*}[t] % Use [t] for top of page; figure* usually only works at the top
+    \centering
+    \includegraphics[width=\textwidth]{valence_forensic_analysis_highres.png}
+    \caption{Valence Forensic Analysis. Visualization of the quantization artifacts (``staircase effect'') introduced by the Post-Hoc Isotonic Calibration.}
+    \label{fig:valence_forensic}
+\end{figure*}
+
+\section{Future Work}
+\label{sec:future_work}
+Future refinements will focus on architectural efficiency for both streams. For Valence, we will investigate replacing post-hoc calibration with a custom Attention Head optimized to amplify high-polarity affective cues, solving conservative bias during the forward pass without artifact-inducing functions. For Arousal, we intend to transition to Instance-Weighted Domain Adaptation. By adopting a probabilistic perspective of generalization \citep{wilson2020bayesian}, we propose scaling the adversarial penalty ($\lambda$) inversely to a user's historical `reliability'. This dynamic gating would allow the network to seamlessly interpolate between zero-shot generalization for strangers and personalized fine-tuning for known subjects.
+
+\section{Limitations}
+\label{sec:limitations}
+While our framework exhibits strong performance, it introduces two critical architectural trade-offs. 
+
+First, the strict decoupling of user identity enforced by the DANN in the Arousal stream imposes a severe penalty on \textit{seen} subjects. By actively unlearning stylistic idiosyncrasies to accommodate the 60.2\% unseen test volume, the model discards the predictive historical baselines of known individuals. This results in a pronounced performance disparity, where unseen users significantly outperform known users on the intensity axis.
+
+Second, our reliance on Post-Hoc Isotonic Calibration to correct the Valence regression head's ``regression to the mean'' introduced detrimental quantization artifacts (cf. Figure \ref{fig:valence_forensic}). Because isotonic regression maps continuous outputs to a discrete step function, it artificially discretized the continuous output space. This manifested as a visible `staircase' effect in our error analysis, occasionally triggering severe error spikes when predicting nuanced emotional states that fell between the learned calibration steps.
+
+\section{Ethical Considerations}
+\label{sec:ethics}
+The longitudinal modeling of affective trajectories from personal essays necessitates a rigorous ethical framework. We identify and address the following concerns:
+
+\textbf{Privacy via Adversarial Disentanglement:} A primary risk in longitudinal assessment is the inadvertent extraction of identifiable stylistic signatures. Our \textbf{DANN architecture} addresses this through a technical safeguard; by utilizing a Gradient Reversal Layer, we enforce user-invariant feature learning. 
+
+This process intentionally strips the model of its ability to associate affective features with specific stylistic identities, ensuring that latent representations capture universal emotional markers rather than identifiable individual traits. This promotes a privacy-by-design approach that prevents the model from being utilized for personal identification.
+
+\textbf{Linguistic vs. Clinical Boundary:} We emphasize that the outputs of the LexMachina framework represent a \textit{linguistic portrayal} of emotion and must not be conflated with clinical diagnosis. The predicted trajectories reflect expressed affect in text and are not a substitute for an individual's internal psychological state or a formal mental health assessment. Such systems should only be utilized under professional psychiatric oversight to avoid the risks of automated misdiagnosis.
+
+\textbf{Consent and Affective Privacy:} We advocate for the Right to Affective Privacy, asserting that emotional tracking should never be utilized for unauthorized surveillance or profiling by third parties. The deployment of affective modeling must be contingent upon the explicit, informed consent of the individual, ensuring that the technology is utilized exclusively for the user's well-being and not for external monitoring or evaluation.
+
+\section*{Acknowledgments}
+We sincerely thank the anonymous reviewers for their insightful feedback, which significantly improved the final version of this manuscript. We also extend our deepest gratitude to the shared task organizers for their hard work in curating the dataset and facilitating this evaluation.
+
+% =====================================
+% REFERENCES 
+% =====================================
+\bibliography{references}
+
+\end{document}

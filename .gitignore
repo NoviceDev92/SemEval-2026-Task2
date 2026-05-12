@@ -1,0 +1,52 @@
+# ML Models (1.4 GB - CRITICAL)
+*.pth
+*.pt
+*.bin
+
+# Build artifacts
+*.log
+*.pdf.bak
+*.aux
+*.fls
+*.fdb_latexmk
+*.out
+*.synctex.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.env
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb~
+.jupyter/
+
+# macOS/Windows
+.DS_Store
+Thumbs.db
+*.lnk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data archives (optional - comment out to track)
+# data/*.zip
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.orig
