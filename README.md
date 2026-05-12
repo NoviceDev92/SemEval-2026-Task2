@@ -119,8 +119,12 @@ SemEval-2026-Task2/
 │   ├── clean-semeval-final.ipynb         # Data cleaning & EDA
 │   └── clean-semeval.ipynb               # Initial exploration
 │
+├── configs/                              # CLI defaults
+│   └── default.yaml                      # Paths + model settings
+├── scripts/                              # Maintenance utilities
+│   └── apply_repro_notebook.py           # Re-apply local-path patches to the main notebook
 ├── src/                                  # Python source code
-│   ├── molecular_mcc_pipeline.py         # Core MCC implementation
+│   ├── molecular_mcc_pipeline.py         # Inference CLI (predict)
 │   └── requirements-molecular.txt        # Dependencies
 │
 ├── data/                                 # Official SemEval datasets
@@ -183,29 +187,48 @@ pip install torch transformers pandas numpy scikit-learn matplotlib seaborn tqdm
    - Download the three dataset ZIPs
    - Extract to `data/` directory
 
-2. **Download Model Weights**
+2. **Download Model Weights** (for inference without retraining)
    - `arousal_base_unified.pth` (702 MB)
    - `valence_base_final.pth` (701 MB)
-   - Place in `models/` directory
+   - `valence_iso.pkl` (isotonic calibration from training)
+   - Place all three in `models/` (see `models/README.md`)
+
+3. **Prepare CSV paths**
+   - After unzipping the official releases, ensure `data/train_subtask1.csv` and `data/test_subtask1.csv` exist (paths must match `configs/default.yaml` or your env vars).
 
 ### Running the Pipeline
 
 ```bash
-# Option 1: Run complete notebook (Recommended)
+# Option 1: Full notebook (train + figures + submission) — run Jupyter from repo root
+cd SemEval-2026-Task2
 jupyter notebook notebooks/final_semeval_task2.ipynb
+```
 
-# Option 2: Run from command line
-python src/molecular_mcc_pipeline.py --config configs/default.yaml
+The first notebook cell sets paths, device, seed, and a working directory under `results/notebook_workspace/` (gitignored). Trained checkpoints and `train_sanitized.csv` are written there; the submission step writes `results/pred_subtask1.csv` and `results/submission_notebook.zip`.
 
-# Option 3: Exploratory analysis
+```bash
+# Option 2: Inference only (weights + isotonic pickle in models/)
+python src/molecular_mcc_pipeline.py predict --config configs/default.yaml
+
+# Option 3: Exploratory cleaning notebooks
 jupyter notebook notebooks/clean-semeval-final.ipynb
 ```
 
-The notebook will automatically:
-- Load and preprocess data
-- Train models across 3 random seeds
-- Generate ensemble predictions
-- Produce analytical visualizations
+### Reproducibility (environment variables)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SEMEVAL_REPO_ROOT` | auto-detect | Repository root if detection fails |
+| `SEMEVAL_DATA_DIR` | `<root>/data` | Directory containing CSVs |
+| `SEMEVAL_TRAIN_CSV` | `<data>/train_subtask1.csv` | Training file |
+| `SEMEVAL_TEST_CSV` | `<data>/test_subtask1.csv` | Test file |
+| `SEMEVAL_MODEL_DIR` | `<root>/models` | Pretrained weights for inference |
+| `SEMEVAL_WORKDIR` | `<root>/results/notebook_workspace` | Notebook `cwd` for artifacts |
+| `SEMEVAL_SEED` | `42` | Base RNG seed (first notebook cell) |
+
+**Matching paper metrics:** use the same seeds, GPU class, and PyTorch/transformers versions as in the paper; full training is GPU-heavy (~4–6 hours per seed as documented).
+
+**Re-applying notebook patches:** if you reset the notebook from an old export, run `python scripts/apply_repro_notebook.py` once from the repo root.
 
 ---
 
@@ -304,87 +327,6 @@ A: Adapt the preprocessing in `notebooks/clean-semeval-final.ipynb` to match you
 
 **Last Updated**: May 12, 2026 | **Status**: Published at SemEval 2026
 
-```
-├── paper/                          # LaTeX paper source and published versions
-│   ├── main.tex                   # Main paper source
-│   ├── references.bib             # Bibliography
-│   ├── acl.sty, acl_natbib.bst    # ACL formatting templates
-│   ├── figures/                   # All figures and diagrams
-│   └── published_papers/          # Published PDF versions
-├── notebooks/                      # Jupyter notebooks for analysis
-│   ├── clean-semeval-final.ipynb  # Final cleaned dataset notebook
-│   ├── molecular_eda.ipynb        # EDA for molecular data
-│   └── final_semeval_task2.ipynb  # Main task pipeline
-├── src/                           # Python source code
-│   ├── molecular_mcc_pipeline.py  # MCC pipeline implementation
-│   └── requirements-molecular.txt # Python dependencies
-├── data/                          # Dataset releases
-│   ├── TRAIN_RELEASE_3SEP2025.zip
-│   ├── TEST_RELEASE_5JAN2026.zip
-│   └── TEST_LABELS_RELEASE_23FEB2026.zip
-├── results/                       # Predictions and scoring results
-│   ├── pred_subtask1.csv          # Predictions
-│   ├── prediction_result.zip
-│   └── scoring_result.zip
-├── models/                        # Pretrained model weights (not in repo)
-└── archive/                       # Old submissions and archives
-```
+**Paper PDFs**: see `paper/published_papers/` when available locally.
 
-## 🚀 Quick Start
-
-### 1. Setup Environment
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r src/requirements-molecular.txt
-```
-
-### 2. Download Model Weights
-
-Model weights are NOT included in the repository due to size constraints. Download them manually:
-
-- `arousal_base_unified.pth` (702 MB)
-- `valence_base_final.pth` (701 MB)
-
-Place them in the `models/` directory before running inference.
-
-### 3. Run Notebooks
-
-```bash
-jupyter notebook notebooks/
-```
-
-## 📝 Paper
-
-The final camera-ready paper is located in `paper/published_papers/SemEval_2026_Task2_Paper.pdf`
-
-## 📊 Data
-
-- **Training**: `data/TRAIN_RELEASE_3SEP2025.zip`
-- **Test (unlabeled)**: `data/TEST_RELEASE_5JAN2026.zip`
-- **Test (labeled)**: `data/TEST_LABELS_RELEASE_23FEB2026.zip`
-
-## 🔧 Key Files
-
-| File | Purpose |
-|------|---------|
-| `src/molecular_mcc_pipeline.py` | MCC pipeline for multimodal sentiment prediction |
-| `notebooks/final_semeval_task2.ipynb` | Complete task workflow and analysis |
-| `paper/main.tex` | LaTeX source for the paper |
-
-## 📦 Model Information
-
-Models are large (1.4 GB total) and stored separately. See `models/README.md` for download instructions.
-
-## 📄 License
-
-This project is part of SemEval 2026 Task 2. Please refer to the original task guidelines for licensing information.
-
-## 👤 Author
-
-GitHub User (user@example.com)
-
----
-
-For more information, see the individual README files in each subdirectory.
+**CLI inference**: copy `valence_iso.pkl` next to the weight files in `models/` if you trained with the notebook (defaults in `configs/default.yaml`).

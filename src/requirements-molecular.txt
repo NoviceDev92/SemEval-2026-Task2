@@ -1,10 +1,16 @@
-# Molecular property pipeline (install RDKit via conda on Windows: conda install -c conda-forge rdkit)
+# SemEval-2026 Task 2 dependencies (historical filename: molecular_mcc)
 torch>=2.0
 transformers>=4.36
 datasets>=2.14
 pandas>=2.0
 numpy>=1.24
 scikit-learn>=1.3
+scipy>=1.10
+pyyaml>=6.0
 tqdm>=4.65
+jupyter>=1.0
+ipykernel>=6.0
+matplotlib>=3.7
+seaborn>=0.13
 # Optional: pip install torch-geometric (see PyG docs for CUDA wheel)
 # rdkit-pypi works on some platforms: pip install rdkit-pypi

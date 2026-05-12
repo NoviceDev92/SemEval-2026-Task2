@@ -21,8 +21,7 @@ Official SemEval 2026 Task 2 dataset releases.
 
 ## 🔗 References
 
-- **Official Task**: SemEval 2026 Task 2 - Multimodal Sentiment Analysis
-- **Task Website**: [SemEval Task Page]
+- **Official Task**: [SemEval 2026 Task 2 — Longitudinal Affect Assessment](https://semeval.github.io/SemEval2026/)
 - **Challenge Date**: 2026
 
 ## ✅ Usage

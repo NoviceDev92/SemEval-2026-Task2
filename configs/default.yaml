@@ -1,0 +1,24 @@
+# SemEval-2026 Task 2 — default paths (relative to repository root).
+# Extract official zips into data/ so train_subtask1.csv and test_subtask1.csv exist.
+# Override with env vars (see README) or edit paths here.
+paths:
+  train_csv: data/train_subtask1.csv
+  test_csv: data/test_subtask1.csv
+  output_csv: results/pred_subtask1.csv
+  submission_zip: results/submission.zip
+  models_dir: models
+  arousal_weights: models/arousal_base_unified.pth
+  valence_weights: models/valence_base_final.pth
+  valence_iso: models/valence_iso.pkl
+
+model:
+  name: microsoft/deberta-v3-base
+  batch_size: 32
+  max_length: 128
+
+# Valence expected on [-2, 2], arousal on [0, 2] per task convention
+clip:
+  valence_min: -2
+  valence_max: 2
+  arousal_min: 0
+  arousal_max: 2

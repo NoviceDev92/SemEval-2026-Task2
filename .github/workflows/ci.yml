@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  syntax-and-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal deps
+        run: pip install pyyaml
+
+      - name: Validate default config
+        run: python -c "import yaml; yaml.safe_load(open('configs/default.yaml'))"
+
+      - name: Byte-compile pipeline (no runtime imports)
+        run: python -m py_compile src/molecular_mcc_pipeline.py
+
+      - name: Byte-compile repro script
+        run: python -m py_compile scripts/apply_repro_notebook.py

@@ -14,19 +14,26 @@ Due to Git repository size constraints, pretrained model weights are **not store
    - Pretrained model for valence sentiment dimension
    - Used for: Valence prediction in final_semeval_task2.ipynb
 
+3. **valence_iso.pkl** (small)
+   - Isotonic calibration fitted during training; required for CLI inference and the submission notebook cell
+   - Place in this directory next to the `.pth` files (or update `configs/default.yaml`)
+
 ### Setup
 
-1. Download both `.pth` files from your model repository/source
+1. Download both `.pth` files and `valence_iso.pkl` from your release artifact or reproduce via the training notebook
 2. Place them in this directory (`models/`)
-3. Update paths in notebooks if necessary
+3. Point `configs/default.yaml` and notebook paths at this folder if you use a different layout
 
 ### Usage in Code
 
 ```python
-# Example loading
+# Checkpoints are state_dicts — load into the model classes used in
+# notebooks/final_semeval_task2.ipynb or src/molecular_mcc_pipeline.py
 import torch
-arousal_model = torch.load('models/arousal_base_unified.pth')
-valence_model = torch.load('models/valence_base_final.pth')
+from pathlib import Path
+
+state = torch.load(Path("models/arousal_base_unified.pth"), map_location="cpu", weights_only=True)
+# model.load_state_dict({k: v for k, v in state.items() if "adv" not in k}, strict=False)
 ```
 
 ## ✅ Tracking Models

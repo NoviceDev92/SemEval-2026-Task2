@@ -25,6 +25,9 @@ build/
 venv/
 env/
 
+# Notebook training artifacts (large / reproducible from pipeline)
+results/notebook_workspace/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb~
