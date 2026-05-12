@@ -1,4 +1,4 @@
-# 🧠📊 LexMachina at SemEval-2026 Task 2: Multimodal Sentiment Analysis
+# 🧠📊 LexMachina at SemEval-2026 Task 2: Longitudinal Affect Assessment
 
 **Composite Correlation: r=0.645 (Valence) | r=0.434 (Arousal)** | **Jadavpur University** | **SemEval 2026 Workshop**
 
@@ -172,7 +172,8 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r src/requirements-molecular.txt
+pip install torch transformers pandas numpy scikit-learn matplotlib seaborn tqdm
+# Or use: pip install -r src/requirements-molecular.txt
 ```
 
 ### Data Setup
